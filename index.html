@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="template.v2.js"></script>
+        <script src="https://d3js.org/d3.v5.min.js"></script>
+        <script src="https://d3js.org/d3-collection.v1.min.js"></script>
+        <script src="https://rawgit.com/nstrayer/slid3r/master/dist/slid3r.js"></script>
+        <script src="cross_fade.js"></script>
+        <link rel="stylesheet" href="style.css">
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+            onload="renderMathInElement(document.body);"></script>
+    </head>
+    <body>
+        <div class="header-container">
+            <div class="header-content">
+              <h1>Inference-Time Scaling for Diffusion Models beyond Scaling Denoising Steps</h1>
+              <div class="button-container">
+                <a href="https://arxiv.org/pdf/2401.08740.pdf" class="button">Paper</a>
+                <!-- <a href="https://github.com/willisma/SiT" class="button">Code</a> -->
+              </div>
+            </div>
+            <div class="header-image">
+                <img src="images/visual_header.png" alt="Teaser Image" class="teaser-image">
+            </div>
+        </div>
+    <d-article>
+        <div class="byline">
+            <div class="byline-container">
+                <div class="byline-column">
+                    <h3>Authors</h3>
+                    <p>Nanye Ma\(^{1*\dagger}\)</p>
+                    <p>Shangyuan Tong\(^{2*\dagger}\)</p>
+                    <p>Haolin Jia\(^3\)</p>
+                    <p>Hexiang Hu\(^3\)</p>
+                    <p>Yu-Chuan Su\(^3\)</p>
+                    <p>Mingda Zhang\(^3\)</p>
+                    <p>Xuan Yang\(^3\)</p>
+                    <p>Yandong Li\(^3\)</p>
+                    <p>Tommi Jaakkola\(^2\)</p>
+                    <p>Xuhui Jia\(^3\)</p>
+                    <p>Saining Xie\(^{1,3}\)</p>
+                </div>
+                <div class="byline-column">
+                    <h3>Affiliations</h3>
+                    <p>\(^1\)New York University</p>
+                    <p>\(^2\)Massachusetts Institute of Technology</p>
+                    <p>\(^3\)Google</p>
+                    <p>\(^*\)Work done during an internship at Google.</p>
+                    <p>\(^\dagger\)Equal Contribution.</p>
+                </div>
+                <div class="byline-column">
+                    <h3>Date</h3>
+                    <p>Jan. 15, 2025</p>
+                </div>
+            </div>
+        </div>
+        <d-contents>
+            <nav>
+                <h4>Contents</h4>
+                <div><a href="#introduction">Innate Inference-Time Scaling of Diffusion</a></div>
+                <div><a href="#framework">Inference-Time Scaling as Search Problem</a></div>
+                <div><a href="#application">Inference-Time Scaling in Text-to-Image</a></div>
+                <div><a href="#ablation">Axes of Inference Compute Investment</a></div>
+                <div><a href="#conclusion">Conclusion</a></div>
+            </nav>
+        </d-contents>
+        
+        <p>
+            
+            Generative models have made significant impacts across various domains, largely due to their ability to scale during training by increasing data, computational resources, and model size, a phenomenon characterized by the scaling laws. 
+            Recent research has begun to explore inference-time scaling behavior in Large Language Models (LLMs), revealing how performance can further improve with additional computation during inference. 
+            Unlike LLMs, diffusion models inherently possess the flexibility to adjust inference-time computation via the number of denoising steps, although the performance gains typically flatten after a few dozen. 
+            In this work, we explore the inference-time scaling behavior of diffusion models beyond increasing denoising steps and investigate how the generation performance can further improve with increased computation.
+        </p>
+        <p>
+            Specifically, we consider a search problem aimed at identifying better noises for the diffusion sampling process. 
+            We structure the design space along two axes: the verifiers used to provide feedback, and the algorithms used to find better noise candidates. 
+            Through extensive experiments on class-conditioned and text-conditioned image generation benchmarks, 
+            our findings reveal that increasing inference-time compute leads to substantial improvements in the quality of samples generated by diffusion models, and with the complicated nature of images, combinations of the components in the framework can be specifically chosen to conform with different application scenario.
+        </p>
+        <p>
+            <d-figure>
+                <figure>
+                    <img src="images/teaser.png" alt="fig:teaser">
+                    <figcaption><b>Inference scaling beyond increasing sampling steps.</b> 
+                        We demonstrate the performance with respect to FID 
+                        \( \textcolor{blue}{\boldsymbol{\downarrow}}\), IS \(\textcolor{red}{\boldsymbol{\uparrow}}\) on ImageNet, and CLIPScore \(\textcolor{green}{\boldsymbol{\uparrow}}\), Aesthetic Score \(\textcolor{orange}{\boldsymbol{\uparrow}}\) on DrawBench. 
+                        Our search framework exhibits substantial improvements in all settings over purely scaling NFEs with increasing denoising steps.</figcaption>
+                </figure>
+            </d-figure>
+        </p>
+        <!-- <p>
+            By carefully introducing the above ingredients, SiT surpasses DiT uniformly across model sizes on the conditional ImageNet 256x256 benchmark using the exact same backbone, number of parameters, and GFLOPs. By exploring various diffusion coefficients, which can be tuned separately from learning, SiT achieves an FID-50K score of <b>2.06</b>.
+            <d-figure>
+                <figure>
+                    <img src="images/visuals/sota_2.png" alt="SiT sota">
+                    <figcaption>Selected samples from our largest SiT-XL models trained on ImageNet<d-cite key="russakovsky2015imagenet"></d-cite> at \(512\times512\) and \(256\times256\) resolutions with classifier-free guidance scale of \(4.0\), respectively.</figcaption>
+                </figure>
+            </d-figure>
+            <d-figure>
+                <svg width="100%" height="100%" viewBox="0 0 320 245" style="min-width: 160px; margin-bottom: -70px"><g id="image_group_fig1" width="320" height="200"><image width="320" height="200" xlink:href="images/visuals/sota_2.png" id="display_image_fig1" x="0" y="0"></image></g></svg>
+                <figcaption>
+                    Selected samples from our largest SiT-XL models trained on ImageNet<d-cite key="russakovsky2015imagenet"></d-cite> at \(512\times512\) and \(256\times256\) resolutions with classifier-free guidance scale of \(4.0\), respectively.
+                </figcaption>
+            </d-figure> -->
+        <!-- </p> -->
+        <section id="introduction">
+            <h2>Innate Inference-Time Scaling of Diffusion</h2>
+            <p>
+                In recent years a family of flexible generative model 
+                based on transforming pure noise \(\varepsilon \sim \mathcal{N}(0, \mathbf{I})\) into data \(x_* \sim p(x)\) has emerged.
+                This transformation can be described by a simple time-dependent process $$
+                    x_t = \alpha_t x_* + \sigma_t \varepsilon
+                $$
+                with t defined on \([0, T]\), \(\alpha_t, \sigma_t\) being time-dependent functions and chosen such that \(x_0 \sim p(x)\), \(x_T \sim \mathcal{N}(0, \mathbf{I})\). 
+                At each \(t\), \(x_t\) has a conditional density \(p_t(x | x_*) = \mathcal{N}(\alpha_t x_*, \sigma_t^2\mathbf{I})\), 
+                and our goal is to estimate the marginal density \(p_t(x) = \int p_t(x | x_*) p(x) \mathrm{d}x \).
+                Diffusion-Based<d-cite key="ho2020denoising"></d-cite><d-cite key="kingma2023variational"></d-cite> <d-cite key="nichol2021improved"></d-cite><d-cite key="karras2022elucidating"></d-cite><d-cite key="song2021scorebased"></d-cite>
+                and Flow-Based Models<d-cite key="lipman2023flow"></d-cite><d-cite key="albergo2023building"></d-cite><d-cite key="albergo2023stochastic"></d-cite><d-cite key="liu2022flow"></d-cite>
+                simulate a vector field via an ordinary differential equation (ODE) or a stochastic differential equation (SDE) to estimate the marginal density \(p_t(x)\)  and perform sampling.
+            </p>
+            <p> 
+                These generation processes usually starts from pure noise and requires multiple forward passes of trained models to denoise and obtain clean data.
+                These forward passes are thus dubbed <em>denoising steps</em>. Since the number of denoising steps can be adjusted to trade sample quality for computational cost, the generation process of diffusion models naturally provides flexibility in allocating inference-time computation budget. 
+                Under the context of generative models, such computation budget is also commonly measured by the <em>number of function evaluations</em> (NFE), to ensure a reasonable comparison with other families of models that use iterative sampling processes but without denoising capabilities<d-cite key="tian2024visualautoregressivemodelingscalable"></d-cite><d-cite key="yu2024languagemodelbeatsdiffusion"></d-cite>.
+                Empirical observations<d-cite key="karras2022elucidating"></d-cite><d-cite key="song2021scorebased"></d-cite><d-cite key="song2022denoisingdiffusionimplicitmodels"></d-cite> have indicated that by investing compute into denoising steps alone, performance gains tend to plateau after a certain NFEs, limiting the benefits of scaling up computation during inference.
+                Therefore, a new framework needs to be designed.
+            </p>
+            <p>
+                In theory, there is explicit randomness in the sampling of diffusion models: the randomly drawn initial noise, and the optional subsequent noise injected via procedures like SDE<d-cite key="song2021scorebased"></d-cite> and Restart Sampling<d-cite key="xu2023restartsamplingimprovinggenerative"></d-cite>
+                Nonetheless, because the model evaluations are inherently deterministic, there is a fixed mapping from these noises to the final samples. 
+                It has been shown that some noises are better than others<d-cite key="qi2024noisescreatedequallydiffusionnoise"></d-cite><d-cite key="ahn2024noiseworthdiffusionguidance"></d-cite>, suggesting that it is possible to push the inference time scaling limit by devoting more compute to finding the more preferable noises for sampling.
+            </p>
+            <!-- <p>
+                We summarize the components of the above models in the following table:
+                <table class="display-table">
+                    <tr>
+                      <th></th>
+                      <th style="text-align: center;">Diffusion-Based</th>
+                      <th style="text-align: center;">Flow-Based</th>
+                    </tr>
+                    <tr>
+                      <td style="text-align: left;">\( t \)</td>
+                      <td style="text-align: left;">\(\{0, \cdots, T\}\) (DDPM<d-cite key="ho2020denoising"></d-cite>) / \([0,1]\) (SBDM<d-cite key="song2021scorebased"></d-cite>) </td>
+                      <td style="text-align: left;">\([0,1]\)</td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: left;">\( \mathcal{L}(\theta) \)</td>
+                        <td style="text-align: left;">\( \mathcal{L}_s \sim \Vert \sigma_t s_\theta(x_t, t) + \varepsilon\Vert^2 \)</td>
+                        <td style="text-align: left;">\( \mathcal{L}_v \sim \Vert v_\theta(x_t, t) - \dot \alpha_t x_* - \dot \sigma_t \varepsilon \Vert^2 \)</td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: left;">\( x_t \)</td>
+                      <td style="text-align: left;">\( \alpha_t x + \sigma_t \varepsilon \)</td>
+                      <td style="text-align: left;">\( \alpha_t x + \sigma_t \varepsilon \)</td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: left;">ODE</td>
+                      <td style="text-align: left;">\( \mathrm{d}X_t =  [f(X_t, t) - \frac{1}{2} g^2(t) \nabla \log p_t(x)] \mathrm{d}t \)</td>
+                      <td style="text-align: left;">\( dX_t = v(X_t, t) \)</td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: left;">SDE</td>
+                      <td style="text-align: left;">\( dX_t =[f(X_t, t) - g^2(t) \nabla \log p_t(x)] \mathrm{d}t + g(t) \mathrm{d} \bar{W}_t \)</td>
+                      <td><b>?</b></td>
+                    </tr>
+                  </table>
+                It has been proved<d-cite key="albergo2023stochastic"></d-cite> that under the same \(\alpha_t\) and  \(\sigma_t\), Diffusion and Flow-based methods share the same time-evolving process:  
+                Flow-Based ODE's corresponding \(p_t(x)\) coincides with that of Diffusion-Based ODE and SDE. <br>
+                In our work, we proceed to demonstrate the mathematical equivalences and performance influences of other components in the above table. We also managed to fill in the question mark by showing that Flow-Based methods can also be sampled by a reverse-time SDE despite the lack of a forward SDE.
+            </p> -->
+            <p>
+                
+                <!-- <d-figure>
+                    <figure class="l-body">
+                        <div id='figure1_div'></div>
+                        <script src="figure1.js"></script>
+                        <figcaption>
+                            Examples on which GPT-4V fails while SEAL with the visual search mechanism succeeds. Even though GPT-4V has a much more powerful LLM (GPT-4) than ours (Vicuna-7B), it still occasionally struggles in scenarios that demand extensive visual processing. These situations require precise visual grounding in high-resolution images, a task where the visual search mechanism becomes essential. Click the small images at the bottom to choose different examples.
+                        </figcaption>
+                    </figure>
+                </d-figure> -->
+            </p>
+        </section>
+        <section id="framework">
+            <h2>Inference-Time Scaling as Search Problems</h2>
+            <p>
+                We frame the inference-time scaling as a search problem over the sampling noises; in particular, <i>how do we know which sampling noises are good, and how do we search them?</i>
+            </p>
+            <p>
+                On a high-level, there are two design axes we propose to consider:
+                <ul>
+                    <li><b>Verifiers</b>: 
+                        pre-traied models that are capable of providing feebacks on the quality of the noise candidates; concretely, they takes in the generated samples and optionally the corresponding conditions, and outputs a
+                        scalar value as the score for each generated sample.
+                    </li>
+                    <li><b>Algorithms</b>: 
+                        functions that are used to find better noise candidates based on the feedbacks from the verifiers. Formally defined, algorithms are functions \[
+                        f: \mathcal{V} \times D_\theta \times \{\mathbb{R}^{H \times W \times C} \times \mathbb{R}^d\}^N \to \mathbb{R}^{H\times W \times C}
+                        \]
+                        that takes in a verifier \(\mathcal{V}\), a pre-trained Diffusion Model \(D_\theta\), and \(N\) pairs of generated samples and corresponding conditions, and outputs the best initial noises according to the deterministic mapping between noises and samples. 
+                        Throughout this search procedure, \(f\) typically performs multiple forward passes through \(D_\theta\). 
+                        We refer to these additional forward passes as the <em>search cost</em>, which we measure in terms of NFEs as well.
+                    </li>
+                    <!-- <li><b><span style="color: #8F00FF">Interpolant</span></b>: the choices of \(\alpha_t\) and \(\sigma_t\);</li> -->
+                    <!-- <li><b><span style="color: #008080">Sampler</span></b>: ODE or SDE.</li> -->
+                </ul>
+                We present a design walk-through of class-conditional ImageNet<d-cite key="russakovsky2015imagenet"></d-cite> generation task below.
+                We take a SiT-XL<d-cite key="ma2024sitexploringflowdiffusionbased"></d-cite> model pre-trained on ImageNet-256 and perform sampling with a second-order Heun sampler.
+                We measure inference compute budget with the total NFEs used in <em>denoising steps</em> and <em>search</em>. The denoising steps is fixed to the optimal setting of 250<d-cite key="ma2024sitexploringflowdiffusionbased"></d-cite>, and we primarily investigate the scaling behavior of the NFEs devoted to search.
+
+                <h3 id="verifiers">Verifiers</h3>
+                We mainly consider three different verifiers, which are meant to simulate three different use cases, as stated below.
+                <p></p>
+                <p>
+                    <b>Oracle Verifier,</b> which utilizes full privileged information about the final evaluation of the selected samples. 
+                    On ImageNet, we directly take the most commonly-used <b>FID</b> and <b>IS</b> as the oracle verifiers. 
+                    For IS, we select the samples with highest classification probability output by a pretrained InceptionV3 model<d-cite key="szegedy2015rethinkinginceptionarchitecturecomputer"></d-cite> of the conditioning class. 
+                    For FID, we use the pre-calculated ImageNet Inception feature statistics as reference, and we greedily choose the sample that minimizes the divergence against the ground-truth statistics.
+
+                    <d-figure>
+                        <figure>
+                            <img src="images/oracle_verifier.png" alt="fig:oracle-verifier">
+                            <figcaption><b>Performances of Oracle Verifiers.</b> 
+                                Random Search with FID and IS on ImageNet.
+                                <b>Inference Compute</b> is given by the total NFEs devoted to denoising steps and search; 
+                                the starting points of all curves in each and the following figures denote only devoting NFEs to denoising steps and 0 NFEs in search.</figcaption>
+                        </figure>
+                    </d-figure>
+
+                    Despite the effectiveness of the oracle verifier, it is not practical in real-world scenarios, as it requires full access to the final evaluation of the samples.
+                    We take such results as mere proof-of-concept, that it is possible to achieve better performance by investing compute into search and scale significantly at inference-time.
+                </p>
+                <p>
+                    <b>Supervised Verifier,</b> which has access to pre-trained models for evaluating both the quality of the samples
+                    and their alignment with the specified conditioning inputs. This is a more realistic setup as the pre-trained models are not directly linked to the final evaluation of the samples, and
+                    we want to investigate if the supervised verifiers can still provide reasonable feedbacks and enable effective inference-time scaling.
+
+                    <d-figure>
+                        <figure>
+                            <img src="images/supervised_verifier.png" style="display: block; margin-left: auto; margin-right: auto; width: 75%;" alt="fig:supervised_verifier">
+                            <figcaption><b>Performances of Supervised Verifiers.</b> 
+                                Random Search with CLIP and DINO on ImageNet.
+                                <b>CLIP-ZeroShot</b> refers to us- ing the logits output by the CLIP zero-shot classifier formulated with Prompt Engineering,
+                                and <b>DINO-LinearHead</b> refers to using the pre-trained linear classifier provided by <d-cite key="oquab2024dinov2learningrobustvisual"></d-cite>.</figcaption>
+                        </figure>
+                    </d-figure>
+
+                    As shown above, we take two models with good learned representations, CLIP<d-cite key="radford2021learningtransferablevisualmodels"></d-cite> and DINO<d-cite key="oquab2024dinov2learningrobustvisual"></d-cite>, 
+                    and utilize the classification perspective of the two models. During search, we run samples through the classifiers and select the ones with the highest logits corresponding to the class labels used in generation.
+                </p>
+                <p>
+                    Although this strategy effectively improves the IS of the samples comparing to purely scaling NFEs with increased denoising steps, the classifiers we use are only partially aligned with the goal of FID score,
+                    since they operate point-wise and do not consider the global statistics of the samples. This can lead to a significant reduction in sample variance and eventually manifests as mode collapse as the compute increases, 
+                    as demonstrated below by the increasing Precision and the decreasing Recall.
+
+                    <d-figure>
+                        <figure>
+                            <img src="images/mode_collapse.png" alt="fig:mode_collapse">
+                            <figcaption><b>Performance of Random Search on ImageNet against DINO and CLIP classification logits.</b> 
+                                We use random search on the SiT-XL model and report FID, IS, Precision, and Recall.
+                        </figure>
+                    </d-figure>
+
+
+                </p>
+                <p>
+                    <b>Self-Supervised Verifier,</b> which uses the feature space (extracted by DINO / CLIP, respectively) cosine similarity of samples at low noise level (\( \sigma = 0.4 \)) and clean samples (\(\sigma = 0.0\)) to evaluate the quality of initial noises.
+                    We found that such similarity score is highly correlated with the logits output by the DINO / CLIP classifiers, and thus use it as an effective surrogate for the supervised verifier, as demonstrated below.
+
+                    <d-figure>
+                        <figure>
+                            <img src="images/self_supervised_verifier.png" style="display: block; margin-left: auto; margin-right: auto; width: 80%;" alt="fig:self_supervised_verifier">
+                            <figcaption><b>Performances of Self-Supervised Verifiers.</b> 
+                                <b>Left:</b> correlation between CLIP and DINO feature similarity score and their classification logits;
+                                <b>Right:</b> Random Search with CLIP and DINO feature similarity score as verifiers across different classifier-free guidance weight.
+                        </figure>
+                    </d-figure>
+
+                    Since self-supervised verifiers do not require extra condition information, this result is encouraging for use cases where conditioning information is not available or hard to obtain, 
+                    like the task of medical imaging generation<d-cite key="khader2023medicaldiffusiondenoisingdiffusion"></d-cite>.
+                    
+                </p>
+
+                <h3 id="algorithms">Algorithms</h3>
+                We mainly consider three different search strategies as elaborated blow.
+
+                <d-figure>
+                    <figure>
+                        <img src="images/algorithms.png" alt="fig:algorithms">
+                        <figcaption><b>Illustration of Search Algorithms.</b> 
+                            <b>Left:</b> Random Search selects the best sample according to the verifier score and rejects the rest.
+                            <b>Center:</b> Zero-Order Search samples \(N\) candidates in the neighborhood of the pivot noise at each step, and selects the best one according to the verifier to continue the search from.
+                            <b>Right:</b> Search over Paths sample noises at intermediate sampling steps to add to current samples to expand the sampling trajectories, and select the best one to continue the search.
+                        </figcaption>
+                    </figure>
+                </d-figure>
+
+                <p>
+                    <b>Random Search,</b> which is essentially a Best-of-N strategy applied once on all noise candidates, and the primary axis for scaling NFEs in search is simply the number of noise candidates to select from.
+                    Its effectiveness has been demonstrated in previous section, and we note that since its search space is unconstrained, it accelerates the converging of search towards the bias of verifiers, 
+                    leading to the loss in diversity. Such phenomenon is similar to reward hacking in reinforcement learning<d-cite key="clark2024directlyfinetuningdiffusionmodels"></d-cite><d-cite key="pan2022effectsrewardmisspecificationmapping"></d-cite>,
+                    and thus we term it as <em>Verifier Hacking</em>.
+                </p>
+                <p>
+                    <b>Zero-Order Search,</b> which is similar to Zero-Order Optimization<d-cite key="flaxman2004onlineconvexoptimizationbandit"></d-cite>, and we specified the detailed procedure below.
+                    <ol>
+                        <li>we start with a random Gaussian noise \(\mathbf{n}\) as pivot.</li>
+                        <li>find \(N\) candidates in the pivot's neighborhood. Formally, the neighborhood is defined as 
+                            \(S_{\mathbf{n}}^\lambda = \{\mathbf{y}: d(\mathbf{y}, \mathbf{n}) = \lambda\}\), where \(d(\cdot, \cdot)\) is some distance metric.
+                        </li>
+                        <li>
+                            run candidates through an ODE solver to obtain samples and their corresponding verifier scores.
+                        </li>
+                        <li>
+                            find the best candidates, update it to be the pivot, and repeat steps 1-3.
+                        </li>
+                    </ol>
+                    We deem the number of iterations (i.e., how many times the algorithm runs through steps 1-3) to be the primary axis for scaling NFEs in search.
+                    When \(N\) gets larger, the algorithm will locate a more precise local “optimum”, and when \(\lambda\) increases, the algorithm will have a larger stride and thus traversing the noise space more quickly. 
+                    In practice, we fix the value of \(\lambda\) and investigate the scaling behavior w.r.t \(N\). We abbreviate the algorithm as ZO-\(N\).
+                </p>
+                <p>
+                    <b>Search over Paths,</b> which iteratively refine the diffusion trajectory, and we specified the detailed procedure below.
+                    <ol>
+                        <li>
+                            sample \(N\) initial i.i.d. noises and run the ODE solver until some noise level \(\sigma\). The noisy samples \(\mathbf{x}_\sigma\) serve as the search starting point.
+                        </li>
+                        <li>
+                            sample \(M\) i.i.d noises for each noisy samples, and simulate the forward noising process from \(\sigma\) to \(\sigma + \Delta f\) to produce \(\{\mathbf{x}_{\sigma + \Delta f}\}\) with size \(M\).
+                        </li>
+                        <li>
+                            run ODE solver on each \(\mathbf{x}_{\sigma + \Delta f}\) to noise level \(\sigma + \Delta f - \Delta b\), and obtain \(\mathbf{x}_{\sigma + \Delta f - \Delta b}\).
+                            Run verifiers on these samples and keep the top \(N\) candidates. Repeat steps 2-3 until the ODE solver reaches \(\sigma = 0\)
+                        </li>
+                        <li>
+                            run the remaining \(N\) samples through random search and keep the best one.
+                        </li>
+                    </ol>
+
+                    To ensure the iteration terminates, we strictly require \(\Delta b > \Delta f\) . 
+                    Also, since the verifiers are typically not adapted to noisy input, we perform one additional denoising step in step 3 and use the clean x-prediction to interact with the verifiers.
+                    Here, the primary scaling axis is the number of noises \(M\) added in step 2, and in practice, we investigate the scaling behavior with different numbers of initial noises \(N\). 
+                    We thus term the algorithm Paths-\(N\).
+
+                    <d-figure>
+                        <figure>
+                            <img src="images/algorithms_performance.png" alt="fig:algorithms_performance">
+                            <figcaption><b>Performances of Search Algorithms.</b> 
+                                We fix the verifier to be DINO-LinearHead and investigate the FID and IS of Zero-Order Search and Search over Paths on ImageNet. 
+                                For each algorithm, we further demonstrate the relationship between \(N\) and their performances.
+                            </figcaption>
+                        </figure>
+                    </d-figure>
+
+                    As shown above, due to the locality nature of the two algorithms, both of them manage to alleviate the diversity issue of FID to some extent while maintaining a scaling Inception Score.
+                </p>
+        </section>
+        
+        <d-figure>
+            <figure>
+                <img src="images/visual_teaser.png" alt="fig:visual_teaser">
+                <figcaption><b>Visualizations of Scaling Behaviors.</b> 
+                    Each row is constructed as follows: <b>left three</b>: sampled with increasing NFEs in denoising steps; <b>right four</b>: sampled with increasing NFEs in search.
+                    First two rows are sampled from SiT-XL with DINO-LinearHead, third row is sampled from PixArt-\(\Sigma\) with Verifier Ensemble, and last two rows are sampled from FLUX-1.dev with Verifier Ensemble.
+                </figcaption>
+            </figure>
+        </d-figure>
+
+        <section id="application">
+            <h2>Inference-Time Scaling in Text-to-Image</h2>
+            <p>
+                With the instantiation of our search framework, we proceed to examine its inference-time scaling capability in larger-scale text-conditioned generation tasks, and study the alignment between verifiers and specific image generation tasks.
+            </p>
+            <p>
+                <b>Datasets.</b> For a more holistic evaluation of our framework, we use two datasets: DrawBench<d-cite key="saharia2022photorealistictexttoimagediffusionmodels"></d-cite> 
+                and T2I-CompBench<d-cite key="huang2023t2icompbenchcomprehensivebenchmarkopenworld"></d-cite>. The former is for a more general image generation task, and the latter is for a more attributes- and composition-oriented image generation task.
+            </p>
+            <p>
+                <b>Models.</b> We use the newly released FLUX.1-dev model<d-cite key="flux1dev"></d-cite> as our backbone, which is currently at the frontier of text-to-image generation and representative of the capabilities of many contemporary text-conditioned diffusion models.
+            </p>
+            <p>
+                <b>Verifiers.</b> We expand the choice of verifiers to cope with the complex nature of text-conditioned image generation: Aesthetic Score Predictor<d-cite key="schuhmann2022laion5bopenlargescaledataset"></d-cite>,
+                CLIPScore<d-cite key="hessel2022clipscorereferencefreeevaluationmetric"></d-cite>, and ImageReward<d-cite key="xu2023imagerewardlearningevaluatinghuman"></d-cite>, to evaluate the visual quality, text-image alignment, and human preferences, respectively. Additionally, we combine these verifiers
+                to create a Verifier Ensemble, to further expand the capacity of verifiers across the evaluative aspects. It uses the unweighted average <b>ranking</b> of the three verifiers as the final score.
+            </p>
+            <p>
+                <b>Metrics.</b> On DrawBench, we use all verifiers not employed in the search process as primary metrics to provide a more comprehensive evaluation. Considering the usage of Verifier Ensemble, we additionally introduce an LLM grader as a neutral evaluator for assessing sample qualities.
+                We prompt the Gemini-1.5 model to assess synthesized images from five different perspectives: Accuracy to Prompt, Originality, Visual Quality, Internal Consistency, and Emotional Resonance.
+                Each perspective is rated on a scale from 0 to 100, and the averaged overall score is used as the final metric.
+                <br>
+                On T2I-CompBench, we use the evaluation pipeline provided to assess the performance of our framework in compositional generation tasks.
+            </p>
+            <d-figure>
+                <figure>
+                    <img src="images/tverifiers.png" alt="fig:tverifiers">
+                    <figcaption><b>Performances of Search with FLUX.1-dev at inference-time.</b> 
+                         We fix the search budget to be 3840 NFEs with random search, and demonstrate the relative performance gain with generation without any search budget.
+                    </figcaption>
+                </figure>
+            </d-figure>
+
+            <h3>Analysis Results: Verifier Hacking and Verifier-Task Alignment</h3>
+
+            <p>
+                <b>DrawBench.</b> As shown above, and as indicated by the LLM Grader, searching with all verifiers generally improves sample quality, while specific improvement behaviors vary across different setups:
+                <ul>
+                    <li>
+                        searching with ImageReward and Verifier Ensemble consistently improve scores across all evaluation metrics.
+                    </li>
+                    <li>
+                        searching with Aesthetic and CLIP verifier improve the LLM grades but slightly degrade each other.
+                    </li>
+                </ul>
+                We attribute the former to the fact that both verifier possess more nuanced evaluative aspects and closely align with human preferences, and reason the latter to be the misalignment in evaluation
+                - Aesthetic Score Predictor focusing solely on visual quality and often favoring highly stylized images, 
+                whereas CLIP prioritizes visual-text alignment at the expense of visual quality<d-cite key="clark2024directlyfinetuningdiffusionmodels"></d-cite><d-cite key="wallace2023diffusionmodelalignmentusing"></d-cite>
+                As a result, exploiting the biases of one verifier (e.g. Aesthetic Score) during search will deviate from the evaluation metrics assessed by the other verifier (e.g. CLIP)
+            </p>
+            <p>
+                Yet, since searching with Aesthetic and CLIP does not lead to a total collapse in sample quality, they can be well-suited for tasks that require a focus on specific attributes such as visual appeal or textual accuracy, 
+                rather than maintaining general-purpose performance. These different behaviors across verifiers highlight the importance of aligning verifiers with the specific task at hand.
+            </p>
+
+            <d-figure>
+                <figure>
+                    <img src="images/tverifier_scale.png" style="display: block; margin-left: auto; margin-right: auto; width: 70%;" alt="fig:tverifiers_scale">
+                    <figcaption><b>Scalability of search with FLUX.1-dev on DrawBench.</b> 
+                        We use random search with Verifier Ensemble to obtain the results. Similar scaling behavior to ImageNet setting is observed across different metrics.
+                    </figcaption>
+                </figure>
+            </d-figure>
+
+            <p>
+                <b>T2I-CompBench.</b> Since T2I-CompBench emphasize correctness in relation to the text prompt, we see that ImageReward becomes the best verifier, whereas Aesthetic Score leads to minimal improvements and
+                even degradation, as demonstrated below.
+            </p>
+                <br>
+                <d-figure>
+                    <table class="display-table">
+                        <thead>
+                        <tr>
+                            <th style="text-align: center;">Verifier</th>
+                            <th style="text-align: center;">Color</th>
+                            <th style="text-align: center;">Shape</th>
+                            <th>Texture</th>
+                            <th>Spatial</th>
+                            <th>Numeracy</th>
+                            <th>Complex</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td>-</td>
+                            <td>0.7692</td>
+                            <td>0.5187</td>
+                            <td>0.6287</td>
+                            <td>0.2429</td>
+                            <td>0.6167</td>
+                            <td>0.3600</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">Aesthetic</td>
+                            <td>0.7618</td>
+                            <td>0.5119</td>
+                            <td>0.5826</td>
+                            <td>0.2593</td>
+                            <td>0.6159</td>
+                            <td>0.3472</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">CLIP</td>
+                            <td>0.8009</td>
+                            <td>0.5722</td>
+                            <td>0.7005</td>
+                            <td>0.2988</td>
+                            <td>0.6457</td>
+                            <td>0.3704</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">ImageReward</td>
+                            <td><strong>0.8303</strong></td>
+                            <td><strong>0.6274</strong></td>
+                            <td><strong>0.7364</strong></td>
+                            <td><strong>0.3151</strong></td>
+                            <td><strong>0.6789</strong></td>
+                            <td><strong>0.3810</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">Ensemble</td>
+                            <td>0.8204</td>
+                            <td>0.5959</td>
+                            <td>0.7197</td>
+                            <td>0.3043</td>
+                            <td>0.6623</td>
+                            <td>0.3754</td>
+                        </tr>
+                        </tbody>
+                    </table>
+
+                    <figcaption>
+                        <strong>Performance of search with FLUX.1-dev on T2I-CompBench.</strong> We use random search with Verifier Ensemble to
+                        obtain the samples; for evaluation, we use the pipeline provided in T2I-CompBench.
+                    </figcaption>
+                </d-figure>
+                <br>
+
+            <p>
+                These contrasting behaviors of verifiers on DrawBench and T2I-CompBench highlight how certain verifiers can be better suited for particular tasks than others.
+                This inspires the design of more task-specific verifiers, which we leave as future works.
+            </p>
+
+            <p>
+                <b>Algorithms.</b> Below we demonstrate the performance of search algorithms on DrawBench. For Zero-Order Search, we set the number of neighbors to be \(N = 2\). For Search over Paths, we set the number of initial noises to be \(N = 2\) as well.
+            </p>
+            <br>
+            <d-figure>
+                <table class="display-table">
+                    <thead>
+                        <tr>
+                        <th style="text-align: center;">Verifier</th>
+                        <th>Aesthetic</th>
+                        <th>CLIPScore</th>
+                        <th>ImageReward</th>
+                        <th>LLM Grader</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Row 1 -->
+                        <tr>
+                        <td>-</td>
+                        <td>5.79</td>
+                        <td>0.71</td>
+                        <td>0.97</td>
+                        <td>84.29</td>
+                        </tr>
+                        
+                        <!-- Separator (midrule) -->
+                        <tr>
+                        <td colspan="5"></td>
+                        </tr>
+                        
+                        <!-- Aesthetic + ... -->
+                        <tr>
+                        <td style="text-align: right;">Aesthetic + Random</td>
+                        <td><strong>6.38</strong></td>
+                        <td>0.69</td>
+                        <td>0.99</td>
+                        <td>86.04</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ ZO-2</td>
+                        <td>6.33</td>
+                        <td>0.69</td>
+                        <td>0.96</td>
+                        <td>85.90</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ Paths-2</td>
+                        <td>6.31</td>
+                        <td>0.70</td>
+                        <td>0.95</td>
+                        <td>85.86</td>
+                        </tr>
+                    
+                        <!-- Separator (midrule) -->
+                        <tr>
+                        <td colspan="5"></td>
+                        </tr>
+                        
+                        <!-- CLIPScore + ... -->
+                        <tr>
+                        <td style="text-align: right;">CLIPScore + Random</td>
+                        <td>5.68</td>
+                        <td><strong>0.82</strong></td>
+                        <td>1.22</td>
+                        <td>86.15</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ ZO-2</td>
+                        <td>5.72</td>
+                        <td>0.81</td>
+                        <td>1.16</td>
+                        <td>85.48</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ Paths-2</td>
+                        <td>5.71</td>
+                        <td>0.81</td>
+                        <td>1.14</td>
+                        <td>85.45</td>
+                        </tr>
+                    
+                        <!-- Separator (midrule) -->
+                        <tr>
+                        <td colspan="5"></td>
+                        </tr>
+                        
+                        <!-- ImageReward + ... -->
+                        <tr>
+                        <td style="text-align: right;">ImageReward + Random</td>
+                        <td>5.81</td>
+                        <td>0.74</td>
+                        <td><strong>1.58</strong></td>
+                        <td>87.09</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ ZO-2</td>
+                        <td>5.79</td>
+                        <td>0.73</td>
+                        <td>1.50</td>
+                        <td>86.22</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ Paths-2</td>
+                        <td>5.76</td>
+                        <td>0.74</td>
+                        <td>1.49</td>
+                        <td>86.33</td>
+                        </tr>
+                    
+                        <!-- Separator (midrule) -->
+                        <tr>
+                        <td colspan="5"></td>
+                        </tr>
+                        
+                        <!-- Ensemble + ... -->
+                        <tr>
+                        <td style="text-align: right;">Ensemble + Random</td>
+                        <td>6.06</td>
+                        <td>0.77</td>
+                        <td>1.41</td>
+                        <td><strong>88.18</strong></td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ ZO-2</td>
+                        <td>5.99</td>
+                        <td>0.77</td>
+                        <td>1.38</td>
+                        <td>87.25</td>
+                        </tr>
+                        <tr>
+                        <td style="text-align: right;">+ Paths-2</td>
+                        <td>6.02</td>
+                        <td>0.76</td>
+                        <td>1.34</td>
+                        <td>86.84</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <figcaption>
+                    <strong>Performance of search algorithms with different verifiers on DrawBench with FLUX.1-dev.</strong>
+                </figcaption>
+            </d-figure>
+            <br>
+            <p>
+                We see that all three methods can effectively improve the sampling quality, with random search outperforming the other two methods in some aspects,
+                due to the locality nature of Zero-Order Search and Search over Paths.
+            </p>
+
+            <h3>Search is Compatible with Finetuning</h3>
+            <p>
+                Both search and finetuning methods<d-cite key="clark2024directlyfinetuningdiffusionmodels"></d-cite><d-cite key="wallace2023diffusionmodelalignmentusing"></d-cite> aim to align the final samples with explicit reward models or human preferences.
+                While the former shifts the sample modes toward the bias of specific verifiers, the latter directly modifies the model's distribution to align with the rewards. 
+                This raises a natural question: can we still shift the sample modes according to verifiers after the model distribution has been modified?
+            </p>
+            <p>
+                We take the DPO fine-tuned Stable Diffusion XL model<d-cite key="wallace2023diffusionmodelalignmentusing"></d-cite> and conduct search on the DrawBench dataset. 
+                Since the model is finetuned on the dataset Pick-a-Pic<d-cite key="kirstain2023pickapicopendatasetuser"></d-cite>, we replace ImageReward with the PickScore evaluator. The results are included below.
+            </p>
+
+            <br>
+            <d-figure>
+                <table class="display-table">
+                    <thead>
+                        <tr>
+                          <th style="text-align: center;">Model</th>
+                          <th style="text-align: center;">Aesthetic</th>
+                          <th style="text-align: center;">CLIP</th>
+                          <th style="text-align: center;">PickScore</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <!-- Row: SDXL -->
+                        <tr>
+                          <td style="text-align: right;">SDXL</td>
+                          <td>5.56</td>
+                          <td>0.73</td>
+                          <td>22.39</td>
+                        </tr>
+                        <!-- Emulate midrule -->
+                        <tr>
+                          <td colspan="4"></td>
+                        </tr>
+                        <!-- Row: + DPO -->
+                        <tr>
+                          <td style="text-align: right;">+ DPO</td>
+                          <td>5.59</td>
+                          <td>0.74</td>
+                          <td>22.54</td>
+                        </tr>
+                        <!-- Row: + DPO & Search -->
+                        <tr>
+                          <td style="text-align: right;">+ DPO &amp; Search</td>
+                          <td><strong>5.66</strong></td>
+                          <td><strong>0.76</strong></td>
+                          <td><strong>23.54</strong></td>
+                        </tr>
+                      </tbody>
+                </table>
+
+                <figcaption>
+                    <strong>Performance of search algorithms with different verifiers on DrawBench with FLUX.1-dev.</strong>
+                </figcaption>
+            </d-figure>
+            <br>
+
+            <p>
+                We see that search method can generalize to different models and can improve the performance of an already aligned model. 
+                This will be a useful tool to mitigate the cases where finetuned models disagree with reward models and to improve their generalizability.
+            </p>
+            
+        </section>
+
+        <section id="ablation">
+            <h2>Axes of Inference Compute Investment</h2>
+            Due to the iterative sampling nature of diffusion models, there are multiple dimensions in which we can allocate compute during search. We present them below and investigate their impact on search.
+
+            <p>
+                <b>Number of search iterations.</b> Increasing the allows the selected noises to approach the optimal set with respect to verifiers. 
+                We observed such behavior in all of our previous experiments.
+            </p>
+
+            <p>
+                <b>Compute per search iteration.</b> We denote such compute <em>NFEs/iter</em>. During search, adjusting NFEs/iter can reveal distinct compute-optimal regions, as shown below.
+
+                <d-figure>
+                    <figure>
+                        <img src="images/nfes_iter.png" style="display: block; margin-left: auto; margin-right: auto; width: 70%;" alt="fig:nfes_iter">
+                        <figcaption><b>Scalability of search with FLUX.1-dev on DrawBench.</b> 
+                            We use random search with Verifier Ensemble to obtain the results. Similar scaling behavior to ImageNet setting is observed across different metrics.
+                        </figcaption>
+                    </figure>
+                </d-figure>
+
+                Using fewer NFEs per iteration accelerates convergence but limits performance, whereas more NFEs slow convergence yet improve results.
+                Beyond 50 NFEs/iter, additional computation yields diminishing returns.
+                Consequently, 50 NFEs/iter were used for ImageNet to balance efficiency and performance, while 30 NFEs/iter sufficed for FLUX-1.dev due to its fewer denoising steps requirement for high-quality samples.
+            </p>
+
+            <h3>Effectiveness of Investing Compute</h3>
+            <p>
+                We explore the effectiveness of scaling inference-time compute for smaller diffusion models and highlight its efficiency relative to the performance
+                of their larger counterparts without search.
+                For ImageNet tasks, we utilize SiT-B and SiT-L, and for text-to-image tasks, we use the smaller transformer-based model PixArt-\(\Sigma\)<d-cite key="chen2024pixartsigmaweaktostrongtrainingdiffusion"></d-cite> besides FLUX-1.dev.
+            </p>
+            <p>
+                Since models of different sizes incur significantly different costs per forward pass, we use estimated GFLOPs to measure their computational cost instead of NFEs.
+            </p>
+
+            <d-figure>
+                <figure>
+                    <img src="images/effec_scale.png" style="display: block; margin-left: auto; margin-right: auto; width: 100%;" alt="fig:effec_scale">
+                    <figcaption><b>Performance of our search methods across different model sizes (SiT-{B,L,XL}) on ImageNet.</b> 
+                        We use the best set up for FID and IS separately. <b>Left</b>: ZO-4 with DINO-LinearHead.; <b>Right</b>: Random Search with DINO-LinearHead.
+                    </figcaption>
+                </figure>
+            </d-figure>
+
+            <p>
+                As shown above, scaling inference-time compute for small models on ImageNet can be highly effective - fixing compute budget, SiT-L can outperform SiT-XL in regions with limited inference compute.
+                Yet, this requires the small model to have a relatively strong performance - SiT-B does not benefit from search as much as SiT-L and does not have an advantageous compute region.
+            </p>
+
+            <p>
+                These observations extend to the text-conditioned setting, as demonstrated below. With just one-tenth of the compute, PixArt-\(\Sigma\) outperforms FLUX- 1.dev without search, and with roughly double the compute, PixArt-\(\Sigma\) surpasses FLUX-1.dev without search by a significant margin.
+                These results have important practical implications: the substantial compute resources invested in training can be offset by a fraction of that compute during generation, enabling access to higher-quality samples more efficiently.
+            </p>
+
+            <br>
+            <d-figure>
+                <table class="display-table">
+                    <thead>
+                        <tr>
+                          <th>Model</th>
+                          <th>Compute Ratio</th>
+                          <th>Aesthetic</th>
+                          <th>CLIP</th>
+                          <th>ImageReward</th>
+                          <th>LLM Grader</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <!-- Row 1: FLUX -->
+                        <tr>
+                          <td style="text-align: left;">FLUX</td>
+                          <td>1</td>
+                          <td>5.79</td>
+                          <td>0.71</td>
+                          <td>0.97</td>
+                          <td>84.29</td>
+                        </tr>
+                        <!-- Emulate midrule with an empty row (optional) -->
+                        <tr><td colspan="6"></td></tr>
+                        <!-- PixArt-Σ rows -->
+                        <tr>
+                          <td rowspan="3" style="text-align: left;">PixArt-\(\Sigma\)</td>
+                          <td>~0.06</td>
+                          <td>5.94</td>
+                          <td>0.68</td>
+                          <td>0.70</td>
+                          <td>84.67</td>
+                        </tr>
+                        <tr>
+                          <td>~0.09</td>
+                          <td>6.03</td>
+                          <td>0.71</td>
+                          <td>0.97</td>
+                          <td>85.62</td>
+                        </tr>
+                        <tr>
+                          <td>~2.59</td>
+                          <td><strong>6.20</strong></td>
+                          <td><strong>0.73</strong></td>
+                          <td><strong>1.15</strong></td>
+                          <td><strong>86.95</strong></td>
+                        </tr>
+                      </tbody>
+                </table>
+
+                <figcaption>
+                    <strong>Comparison between PixArt-\(\Sigma\) when search with Verifier Ensemble and FLUX without search.</strong> We use the total compute consumed by FLUX to generate one sample as the standard unit and scale the compute used by PixArt-\(\Sigma\) accordingly. These total compute estimates are based on our best approximation and may not be entirely precise.
+                </figcaption>
+            </d-figure>
+            <br>
+
+        </section>
+
+        <section id="conclusion">
+            <h2>Conclusion</h2>
+            <p>
+                In this work, we present a framework for inference-time scaling in diffusion models, demonstrating that scaling compute through search could significantly improve performances across various model sizes and generation tasks, and different inference-time compute budget can lead to varied scaling behavior. 
+                Identifying verifiers and algorithms as two crucial design axes in our search framework, we show that optimal configurations vary by task, with no universal solution. 
+                Additionally, our investigation into the alignment between different verifiers and generation tasks uncovers their inherent biases, highlighting the need for more carefully designed verifiers to align with specific vision generation tasks.
+            </p>
+        </section>
+        
+        </d-article>
+        <d-appendix>
+            <h3>BibTeX</h3>
+            <p class="bibtex">
+                @article{ma2024sit,<br>
+                &nbsp;&nbsp;title={SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers},<br>
+                &nbsp;&nbsp;author={Nanye Ma and Mark Goldstein and Michael S. Albergo and Nicholas M. Boffi and Eric Vanden-Eijnden and Saining Xie},<br>
+                &nbsp;&nbsp;year={2024},<br>
+                &nbsp;&nbsp;eprint={2401.08740},<br>
+                &nbsp;&nbsp;archivePrefix={arXiv},<br>
+                &nbsp;&nbsp;primaryClass={cs.CV}<br>
+                }
+            </p>
+
+            <d-footnote-list></d-footnote-list>
+            <d-citation-list></d-citation-list>
+        </d-appendix>
+
+        <!-- bibliography will be inlined during Distill pipeline's pre-rendering -->
+        <d-bibliography src="bibliography.bib"></d-bibliography>
+
+        <!-- <script type="text/bibliography">
+        
+        </script> -->
+        <script src="contents_bar.js"></script>
+        
+        
+
+    </body>
+
+    </body>
+</html>
