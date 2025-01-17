@@ -367,7 +367,7 @@
                 <img src="images/visual_teaser.png" alt="fig:visual_teaser">
                 <figcaption><b>Visualizations of Scaling Behaviors.</b> 
                     Each row is constructed as follows: <b>left three</b>: sampled with increasing NFEs in denoising steps; <b>right four</b>: sampled with increasing NFEs in search.
-                    First two rows are sampled from SiT-XL with DINO-LinearHead, third row is sampled from PixArt-\(\Sigma\) with Verifier Ensemble, and last two rows are sampled from FLUX-1.dev with Verifier Ensemble.
+                    First two rows are sampled from SiT-XL with DINO-LinearHead, third row is sampled from PixArt-\(\Sigma\) with Verifier Ensemble, and last two rows are sampled from FLUX.1-dev with Verifier Ensemble.
                 </figcaption>
             </figure>
         </d-figure>
@@ -751,14 +751,14 @@
 
                 Using fewer NFEs per iteration accelerates convergence but limits performance, whereas more NFEs slow convergence yet improve results.
                 Beyond 50 NFEs/iter, additional computation yields diminishing returns.
-                Consequently, 50 NFEs/iter were used for ImageNet to balance efficiency and performance, while 30 NFEs/iter sufficed for FLUX-1.dev due to its fewer denoising steps requirement for high-quality samples.
+                Consequently, 50 NFEs/iter were used for ImageNet to balance efficiency and performance, while 30 NFEs/iter sufficed for FLUX.1-dev due to its fewer denoising steps requirement for high-quality samples.
             </p>
 
             <h3>Effectiveness of Investing Compute</h3>
             <p>
                 We explore the effectiveness of scaling inference-time compute for smaller diffusion models and highlight its efficiency relative to the performance
                 of their larger counterparts without search.
-                For ImageNet tasks, we utilize SiT-B and SiT-L, and for text-to-image tasks, we use the smaller transformer-based model PixArt-\(\Sigma\)<d-cite key="chen2024pixartsigmaweaktostrongtrainingdiffusion"></d-cite> besides FLUX-1.dev.
+                For ImageNet tasks, we utilize SiT-B and SiT-L, and for text-to-image tasks, we use the smaller transformer-based model PixArt-\(\Sigma\)<d-cite key="chen2024pixartsigmaweaktostrongtrainingdiffusion"></d-cite> besides FLUX.1-dev.
             </p>
             <p>
                 Since models of different sizes incur significantly different costs per forward pass, we use estimated GFLOPs to measure their computational cost instead of NFEs.
@@ -779,7 +779,7 @@
             </p>
 
             <p>
-                These observations extend to the text-conditioned setting, as demonstrated below. With just one-tenth of the compute, PixArt-\(\Sigma\) outperforms FLUX- 1.dev without search, and with roughly double the compute, PixArt-\(\Sigma\) surpasses FLUX-1.dev without search by a significant margin.
+                These observations extend to the text-conditioned setting, as demonstrated below. With just one-tenth of the compute, PixArt-\(\Sigma\) outperforms FLUX- 1.dev without search, and with roughly double the compute, PixArt-\(\Sigma\) surpasses FLUX.1-dev without search by a significant margin.
                 These results have important practical implications: the substantial compute resources invested in training can be offset by a fraction of that compute during generation, enabling access to higher-quality samples more efficiently.
             </p>
 
@@ -855,16 +855,15 @@
         <d-appendix>
             <h3>BibTeX</h3>
             <p class="bibtex">
-                @article{ma2024sit,<br>
-                &nbsp;&nbsp;title={SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers},<br>
-                &nbsp;&nbsp;author={Nanye Ma and Mark Goldstein and Michael S. Albergo and Nicholas M. Boffi and Eric Vanden-Eijnden and Saining Xie},<br>
-                &nbsp;&nbsp;year={2024},<br>
-                &nbsp;&nbsp;eprint={2401.08740},<br>
+                @article{ma2025inferencetimescalingdiffusionmodels,<br>
+                &nbsp;&nbsp;title={Inference-Time Scaling for Diffusion Models beyond Scaling Denoising Steps},<br>
+                &nbsp;&nbsp;author={Nanye Ma and Shangyuan Tong and Haolin Jia and Hexiang Hu and Yu-Chuan Su and Mingda Zhang and Xuan Yang and Yandong Li and Tommi Jaakkola and Xuhui Jia and Saining Xie},<br>
+                &nbsp;&nbsp;year={2025},<br>
+                &nbsp;&nbsp;eprint={2501.09732},<br>
                 &nbsp;&nbsp;archivePrefix={arXiv},<br>
                 &nbsp;&nbsp;primaryClass={cs.CV}<br>
                 }
             </p>
-
             <d-footnote-list></d-footnote-list>
             <d-citation-list></d-citation-list>
         </d-appendix>
